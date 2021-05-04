@@ -30,12 +30,12 @@ plt.ion()
 
 class EventDisplay:
 
-    def __init__(self, filename, geometry_file=None, maxhits=100000, minhits=1, LDSfilename=None):
+    def __init__(self, filename, geometry_file=None, maxhits=100000, minhits=1, LDSdirectory=None):
         f = h5py.File(filename, 'r')
 
         events = f['events']
         self.fnm=filename
-        self.ldsfnm=LDSfilename
+        self.LDSdirectory=LDSdirectory
         mevents = events[events['nhit'] < maxhits]
         self.events = mevents[mevents['nhit'] > minhits]
         self.tracks = f['tracks'] if 'tracks' in f.keys() else None
@@ -152,8 +152,12 @@ class EventDisplay:
         self.ax_lds7 = ax_lds7
         self.ax_lds8 = ax_lds8
         self.ax_lds0 = ax_lds0
-        
-        
+
+        # Find matching light file for charge file
+        self.df, self.lpath = lds.FindPartnerLightFile(self.fnm,self.LDSdirectory)
+        # Convert utime to a better usable format
+        self.df['utime_ms'] = self.df['utime_ms'].astype(np.int64)
+
         self.run()
 
 
@@ -477,15 +481,8 @@ class EventDisplay:
         event_n = self.events[ev_id]
         event_datime = datetime.utcfromtimestamp(event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         event_startTime = self.get_event_start_time(event)
-        lds_file = self.ldsfnm
-        # Find file
-        rfile = ROOT.TFile.Open(lds_file, 'read')
-        rwf = rfile.Get('rwf')
-        # Uproot
-        df = (uproot.open(lds_file)['rwf']).arrays(['event','sn','ch','utime_ms','tai_ns'],library='pd')
-        # Convert utime to a better usable format
-        df['utime_ms'] = df['utime_ms'].astype(np.int64)
-        meta = lds.GetEventMetadata(df,rwf,event_n,event_datime,event_startTime/10)
+        meta = lds.GetEventMetadata(self.df,self.lpath,event_n,event_datime,event_startTime/10)
+        print(meta)
         
         # Make plots
         # [ADC,channel,color,plot_n]
@@ -518,11 +515,13 @@ class EventDisplay:
             # Make plot
             if h!=None:
                 this_ax.axvline(0,ls='--',color='C7',alpha=0.5)
-                this_ax.plot(b,h,color=col)
+                this_ax.plot(b,h,color=col,lw=0.75,alpha=0.75)
                 this_ax.set_xlim(min(b),max(b))
                 this_ax.set_ylim(-32800,10000)
-                this_ax.grid(ls='--',color='C7',alpha=0.1)
+                this_ax.grid(ls='--',color='C7',alpha=0.2)
+                this_ax.grid(True)
 
+                
         # Busy signal
         this_ax = self.ax_lds0
         this_ax.axvline(0,ls='--',color='C7',alpha=0.5)
@@ -532,8 +531,10 @@ class EventDisplay:
         if meta.hist_h[2][0]!=None:
             this_ax.plot(meta.hist_b[2][0],meta.hist_h[2][0],color='C3')
             this_ax.set_xlim(min(meta.hist_b[2][0]),max(meta.hist_b[2][0]))
-        this_ax.set_ylim(-32800,10000)
-        this_ax.grid(ls='--',color='C7',alpha=0.1)
+        this_ax.set_ylim(-32800,32800)
+        this_ax.grid(ls='--',color='C7',alpha=0.2)
+        this_ax.grid(True)
+        
 
         return 1    
 

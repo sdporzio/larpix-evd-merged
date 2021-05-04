@@ -1,10 +1,20 @@
-import datetime as dt
-import LDS.c_eventmeta as cem
+import os, uproot, ROOT
 import numpy as np
+import pandas as pd
+import datetime as dt
+from pathlib import Path
+import LDS.c_eventmeta as cem
 
-def GetEventMetadata(df,rwf,event_n,datime,offset_us,window_us=1500):
+# Locate the file archive and load it
+pathFromHere = Path(__file__).parent.absolute()
+fileArchivePath = str(pathFromHere)+'/fileArchive.csv'
+fArc = pd.read_csv(fileArchivePath)
 
-
+### GET ALL WAVEFORM INFORMATION FROM WAVEFORM FILES
+def GetEventMetadata(df,lpath,event_n,datime,offset_us,window_us=1500):
+    # Open ROOT file
+    rfile = ROOT.TFile.Open(lpath, 'read')
+    rwf = rfile.Get('rwf')
     # Create event metadata object
     eventmeta = cem.EventMeta(event_n)
     # Assign datetime object and convert to epoch linux time
@@ -52,6 +62,7 @@ def GetEventMetadata(df,rwf,event_n,datime,offset_us,window_us=1500):
     if (len(t0_adc1)>1 or len(t0_adc2)>1):
         print("ATTENTION: Multiple t0 found in same window. Will choose the earliest.")
         eventmeta.successfullyMerged = 2
+        return eventmeta
     elif (len(t0_adc1)==0 and len(t0_adc2)==0):
         print("ERROR: No t0 found in timing window. Maybe try with a larger one.")
         eventmeta.successfullyMerged = 0
@@ -93,7 +104,7 @@ def GetEventMetadata(df,rwf,event_n,datime,offset_us,window_us=1500):
         entry_number = query_df.query(f'ch==0 & sn=={adc_sn}').iloc[0].name
         # Let's grab the corresponding waveform histogram, by switching to the proper entry
         eventmeta.entryPerChannel[trigadc][0] = entry_number
-        rwf.GetEntry(eventmeta.entryPerChannel[trigadc][0])
+        rwf.GetEntry(entry_number)
         wf_hist = getattr(rwf,'th1s_ptr')
         # Light ADC clock at 100 MHz, bin corresponding to 10 ns, so mult. by 10 to get ns
         eventmeta.hist_b[trigadc][0] = [wf_hist.GetBinLowEdge(i) for i in range(1,wf_hist.GetNbinsX()+1)]
@@ -134,3 +145,27 @@ def GetEventMetadata(df,rwf,event_n,datime,offset_us,window_us=1500):
 
 
     return eventmeta
+
+
+
+def FindPartnerLightFile(cfile,ldirectory):
+    # Extract the name substring from the charge file path
+    split = np.array(cfile.split('/')[-1].split('_'))
+    cfileCore = '_'.join(split[ np.where(split=='2021')[0][0] : np.where(split=='CEST')[0][0] ])
+    # Query the database for the corresponding light file
+    lfileCore = fArc[fArc['chargeFile'].str.contains(cfileCore)]['lightFile'].values
+    # Check if we at least one match
+    if len(lfileCore)==0:
+        raise Exception(f'ERROR. No matching light file for {cfileCore}. Exiting.')
+    # If not let's notify that's the case
+    print(f'Charge file {cfileCore} has been matched to light file {lfileCore}.')
+    # Form the light file name
+    lfile = 'rwf_'+lfileCore[0]+'.root'
+    lpath = ldirectory+'/'+lfile
+    # Now make sure the file actually exists
+    if not os.path.isfile(lpath):
+        raise Exception(f'ERROR. Matching file {lpath} does not exist. Exiting.')
+    # Load the necessary files
+    df = (uproot.open(lpath)['rwf']).arrays(['event','sn','ch','utime_ms','tai_ns'],library='pd')
+    return df, lpath
+
