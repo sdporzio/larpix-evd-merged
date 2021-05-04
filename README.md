@@ -1,0 +1,1 @@
+Updated event display which shows both charge and light readout information
