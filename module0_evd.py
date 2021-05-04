@@ -30,7 +30,7 @@ plt.ion()
 
 class EventDisplay:
 
-    def __init__(self, filename, geometry_file=None, maxhits=100000, minhits=1, LDSdirectory=None):
+    def __init__(self, filename, geometry_file=None, maxhits=100000, minhits=1, LDSdirectory=None, trackOffset=0):
         f = h5py.File(filename, 'r')
 
         events = f['events']
@@ -42,6 +42,7 @@ class EventDisplay:
         self.hits = f['hits']
         self.ext_trigs = f['ext_trigs'] if 'ext_trigs' in f.keys() else None
         self.info = f['info'].attrs
+        self.trackOffset = float(trackOffset)
 
         self.fig = plt.figure(constrained_layout=False,figsize=(13.0,6.5))
 
@@ -435,11 +436,11 @@ class EventDisplay:
                                 -self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event['ts_start']))
 
                 self.ax_xy.plot((track_start[i][0],track_end[i][0]),
-                                (track_start[i][1],track_end[i][1]),
+                                (track_start[i][1]+self.trackOffset,track_end[i][1]+self.trackOffset),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
 
                 self.ax_zy.plot((track_start[i][2],track_end[i][2]),
-                                (track_start[i][1],track_end[i][1]),
+                                (track_start[i][1]+self.trackOffset,track_end[i][1]+self.trackOffset),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
 
                 hits_anode1 = hits_trk[hits_trk['iogroup'] == 1]
@@ -455,7 +456,7 @@ class EventDisplay:
 
                 self.ax_xyz.plot((track_start[i][0],track_end[i][0]),
                                  (track_start[i][2],track_end[i][2]),
-                                 (track_start[i][1],track_end[i][1]),
+                                 (track_start[i][1]+self.trackOffset,track_end[i][1]+self.trackOffset),
                                  c='C{}'.format(i+1), alpha=1, lw=4)
 
                 unassoc_hit_mask[np.in1d(hits['hid'],hits_trk['hid'])] = 0
